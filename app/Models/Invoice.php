@@ -12,7 +12,9 @@ class Invoice extends Model
         'invoice_number', 'type', 'customer_id',
         'subtotal', 'discount', 'total',
         'paid', 'remaining', 'profit',
-        'payment_status', 'notes'
+        'payment_status', 'status',
+        'cancellation_reason', 'cancelled_at',
+        'notes'
     ];
 
     protected $casts = [
@@ -22,6 +24,7 @@ class Invoice extends Model
         'paid' => 'decimal:2',
         'remaining' => 'decimal:2',
         'profit' => 'decimal:2',
+        'cancelled_at' => 'datetime',
     ];
 
     public function customer(): BelongsTo
@@ -32,6 +35,32 @@ class Invoice extends Model
     public function items(): HasMany
     {
         return $this->hasMany(InvoiceItem::class);
+    }
+
+    /**
+     * هل الفاتورة ملغاة؟
+     */
+    public function isCancelled(): bool
+    {
+        return $this->status === 'cancelled';
+    }
+
+    /**
+     * هل الفاتورة نشطة؟
+     */
+    public function isActive(): bool
+    {
+        return $this->status === 'active' || $this->status === null;
+    }
+
+    /**
+     * Scope: فقط الفواتير النشطة
+     */
+    public function scopeActive($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('status', 'active')->orWhereNull('status');
+        });
     }
 
     /**

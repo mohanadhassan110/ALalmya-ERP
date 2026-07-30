@@ -9,6 +9,7 @@ use App\Models\Customer;
 use App\Models\CustomerTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class InvoiceController extends Controller
 {
@@ -19,15 +20,42 @@ class InvoiceController extends Controller
         if ($request->filled('type')) {
             $query->where('type', $request->type);
         }
+        if ($request->filled('status')) {
+            if ($request->status === 'active') {
+                $query->active();
+            } elseif ($request->status === 'cancelled') {
+                $query->where('status', 'cancelled');
+            }
+        }
+        if ($request->filled('payment_status')) {
+            $query->where('payment_status', $request->payment_status);
+        }
         if ($request->filled('date_from')) {
             $query->whereDate('created_at', '>=', $request->date_from);
         }
         if ($request->filled('date_to')) {
             $query->whereDate('created_at', '<=', $request->date_to);
         }
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('invoice_number', 'like', "%{$search}%")
+                  ->orWhereHas('customer', function ($cq) use ($search) {
+                      $cq->where('name', 'like', "%{$search}%");
+                  });
+            });
+        }
 
         $invoices = $query->orderBy('created_at', 'desc')->paginate(20);
-        return view('invoices.index', compact('invoices'));
+
+        // Stats for the filter bar
+        $todayStats = [
+            'count' => Invoice::active()->whereDate('created_at', today())->count(),
+            'total' => Invoice::active()->whereDate('created_at', today())->sum('total'),
+            'paid' => Invoice::active()->whereDate('created_at', today())->sum('paid'),
+        ];
+
+        return view('invoices.index', compact('invoices', 'todayStats'));
     }
 
     /**
@@ -36,7 +64,7 @@ class InvoiceController extends Controller
      */
     public function createRetail()
     {
-        $products = Product::where('stock_quantity', '>', 0)->with('category')->orderBy('name')->get();
+        $products = Product::with('category')->orderBy('name')->get();
         return view('invoices.create-retail', compact('products'));
     }
 
@@ -46,7 +74,7 @@ class InvoiceController extends Controller
      */
     public function createWholesale()
     {
-        $products = Product::where('stock_quantity', '>', 0)->with('category')->orderBy('name')->get();
+        $products = Product::with('category')->orderBy('name')->get();
         $customers = Customer::where('type', 'wholesale')->orderBy('name')->get();
         return view('invoices.create-wholesale', compact('products', 'customers'));
     }
@@ -74,7 +102,7 @@ class InvoiceController extends Controller
 
             // حساب كل عنصر
             foreach ($request->items as $itemData) {
-                $product = Product::findOrFail($itemData['product_id']);
+                $product = Product::lockForUpdate()->findOrFail($itemData['product_id']);
 
                 if ($product->stock_quantity < $itemData['quantity']) {
                     throw new \Exception("الكمية المطلوبة من {$product->name} أكبر من المتاح ({$product->stock_quantity})");
@@ -116,6 +144,7 @@ class InvoiceController extends Controller
                 'remaining' => max(0, $remaining),
                 'profit' => $totalProfit - $discount, // الربح بعد الخصم
                 'payment_status' => $remaining <= 0 ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid'),
+                'status' => 'active',
                 'notes' => $request->notes,
             ]);
 
@@ -139,6 +168,15 @@ class InvoiceController extends Controller
             return $invoice;
         });
 
+        // Return JSON for AJAX POS submissions
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'invoice' => $invoice->load('items'),
+                'message' => 'تم إنشاء فاتورة التجزئة بنجاح',
+            ]);
+        }
+
         return redirect()->route('invoices.show', $invoice)
             ->with('success', 'تم إنشاء فاتورة التجزئة بنجاح');
     }
@@ -161,13 +199,13 @@ class InvoiceController extends Controller
         ]);
 
         $invoice = DB::transaction(function () use ($request) {
-            $customer = Customer::findOrFail($request->customer_id);
+            $customer = Customer::lockForUpdate()->findOrFail($request->customer_id);
             $subtotal = 0;
             $totalProfit = 0;
             $items = [];
 
             foreach ($request->items as $itemData) {
-                $product = Product::findOrFail($itemData['product_id']);
+                $product = Product::lockForUpdate()->findOrFail($itemData['product_id']);
 
                 if ($product->stock_quantity < $itemData['quantity']) {
                     throw new \Exception("الكمية المطلوبة من {$product->name} أكبر من المتاح ({$product->stock_quantity})");
@@ -219,6 +257,7 @@ class InvoiceController extends Controller
                 'remaining' => max(0, $remaining),
                 'profit' => $totalProfit - $discount,
                 'payment_status' => $remaining <= 0 ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid'),
+                'status' => 'active',
                 'notes' => $request->notes,
             ]);
 
@@ -267,6 +306,14 @@ class InvoiceController extends Controller
             return $invoice;
         });
 
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'invoice' => $invoice->load('items', 'customer'),
+                'message' => 'تم إنشاء فاتورة الجملة بنجاح',
+            ]);
+        }
+
         return redirect()->route('invoices.show', $invoice)
             ->with('success', 'تم إنشاء فاتورة الجملة بنجاح');
     }
@@ -289,9 +336,25 @@ class InvoiceController extends Controller
         return view('invoices.print', compact('invoice'));
     }
 
-    public function destroy(Invoice $invoice)
+    /**
+     * إلغاء الفاتورة (بدلاً من الحذف)
+     * يستعيد المخزون ورصيد العميل ويحفظ سبب الإلغاء
+     */
+    public function cancel(Request $request, Invoice $invoice)
     {
-        DB::transaction(function () use ($invoice) {
+        $request->validate([
+            'cancellation_reason' => 'required|string|max:500',
+        ]);
+
+        if ($invoice->isCancelled()) {
+            $message = 'هذه الفاتورة ملغاة بالفعل';
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['error' => $message], 422);
+            }
+            return back()->with('error', $message);
+        }
+
+        DB::transaction(function () use ($request, $invoice) {
             // إرجاع المخزون
             foreach ($invoice->items as $item) {
                 $product = Product::find($item->product_id);
@@ -302,26 +365,59 @@ class InvoiceController extends Controller
 
             // إرجاع رصيد العميل إن وجد
             if ($invoice->customer_id) {
-                $customer = Customer::find($invoice->customer_id);
+                $customer = Customer::lockForUpdate()->find($invoice->customer_id);
                 if ($customer) {
+                    // عكس تأثير الفاتورة على الرصيد
                     $customer->balance -= $invoice->total;
-                    
-                    $paymentTransaction = CustomerTransaction::where('invoice_id', $invoice->id)->where('type', 'payment')->first();
+
+                    // عكس تأثير السداد
+                    $paymentTransaction = CustomerTransaction::where('invoice_id', $invoice->id)
+                        ->where('type', 'payment')
+                        ->first();
                     if ($paymentTransaction) {
                         $customer->balance += $paymentTransaction->amount;
                     }
-                    
+
                     $customer->save();
-                    
-                    CustomerTransaction::where('invoice_id', $invoice->id)->delete();
+
+                    // تسجيل حركة الإلغاء
+                    CustomerTransaction::create([
+                        'customer_id' => $customer->id,
+                        'type' => 'adjustment',
+                        'amount' => $invoice->total,
+                        'balance_after' => $customer->balance,
+                        'description' => "إلغاء فاتورة رقم {$invoice->invoice_number} - {$request->cancellation_reason}",
+                        'invoice_id' => $invoice->id,
+                    ]);
                 }
             }
 
-            $invoice->items()->delete();
-            $invoice->delete();
+            // تحديث حالة الفاتورة
+            $invoice->update([
+                'status' => 'cancelled',
+                'cancellation_reason' => $request->cancellation_reason,
+                'cancelled_at' => now(),
+            ]);
         });
 
+        $message = "تم إلغاء الفاتورة {$invoice->invoice_number} وإرجاع المخزون بنجاح";
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json(['success' => true, 'message' => $message]);
+        }
+
         return redirect()->route('invoices.index')
-            ->with('success', 'تم حذف الفاتورة وإرجاع المخزون بنجاح');
+            ->with('success', $message);
+    }
+
+    /**
+     * حذف الفاتورة (Legacy - redirects to cancel)
+     * محفوظة للتوافقية لكن نفضل الإلغاء
+     */
+    public function destroy(Invoice $invoice)
+    {
+        // Redirect to show page with a prompt to cancel instead
+        return redirect()->route('invoices.show', $invoice)
+            ->with('error', 'لحماية السجلات المحاسبية، استخدم خيار "إلغاء الفاتورة" بدلاً من الحذف');
     }
 }

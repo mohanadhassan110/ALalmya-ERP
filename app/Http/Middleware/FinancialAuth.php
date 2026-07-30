@@ -8,7 +8,6 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Middleware لحماية القسم المالي بكلمة مرور
- * كلمة المرور: Hassan@2004
  */
 class FinancialAuth
 {

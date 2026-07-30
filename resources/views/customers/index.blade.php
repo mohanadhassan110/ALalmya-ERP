@@ -1,10 +1,21 @@
 @extends('layouts.app')
 @section('title', 'العملاء - سنتر العالمية')
 @section('page-title', 'إدارة العملاء')
+@section('breadcrumb')
+    <a href="{{ route('home') }}">الرئيسية</a> / العملاء
+@endsection
 
 @section('content')
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <h4 class="fw-bold mb-0"><i class="bi bi-people-fill me-2 text-primary"></i>العملاء</h4>
+@php
+    $totalDebt = $customers->where('balance', '>', 0)->sum('balance');
+    $totalCredit = $customers->where('balance', '<', 0)->sum(fn($c) => abs($c->balance));
+@endphp
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-people-fill me-2 text-primary"></i>العملاء</h4>
+        <small class="text-muted">{{ $customers->count() }} عميل — ديون: {{ number_format($totalDebt, 2) }} ج.م — أرصدة دائنة: {{ number_format($totalCredit, 2) }} ج.م</small>
+    </div>
     <a href="{{ route('customers.create') }}" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i> إضافة عميل</a>
 </div>
 
@@ -12,7 +23,7 @@
     <div class="card-body py-3">
         <form method="GET" class="row g-2 align-items-end">
             <div class="col-md-5">
-                <input type="text" name="search" class="form-control" placeholder="بحث بالاسم..." value="{{ request('search') }}">
+                <input type="text" name="search" class="form-control" placeholder="بحث بالاسم أو الهاتف..." value="{{ request('search') }}">
             </div>
             <div class="col-md-4">
                 <select name="type" class="form-select">
@@ -35,7 +46,6 @@
             <table class="table table-hover mb-0">
                 <thead>
                     <tr>
-                        <th>#</th>
                         <th>اسم العميل</th>
                         <th>النوع</th>
                         <th>الهاتف</th>
@@ -46,7 +56,6 @@
                 <tbody>
                     @forelse($customers as $customer)
                     <tr>
-                        <td>{{ $customer->id }}</td>
                         <td class="fw-bold">
                             <a href="{{ route('customers.show', $customer) }}" class="text-decoration-none">{{ $customer->name }}</a>
                         </td>
@@ -55,28 +64,46 @@
                                 {{ $customer->type === 'wholesale' ? 'جملة' : 'تجزئة' }}
                             </span>
                         </td>
-                        <td>{{ $customer->phone ?? '—' }}</td>
+                        <td>
+                            @if($customer->phone)
+                                <div class="d-flex gap-1 align-items-center">
+                                    <span>{{ $customer->phone }}</span>
+                                    <a href="https://wa.me/{{ preg_replace('/[^0-9]/', '', $customer->phone) }}" target="_blank" class="btn btn-sm btn-outline-success p-0 px-1" title="واتساب">
+                                        <i class="bi bi-whatsapp"></i>
+                                    </a>
+                                    <a href="tel:{{ $customer->phone }}" class="btn btn-sm btn-outline-primary p-0 px-1" title="اتصال">
+                                        <i class="bi bi-telephone"></i>
+                                    </a>
+                                </div>
+                            @else
+                                <span class="text-muted">—</span>
+                            @endif
+                        </td>
                         <td>
                             @if($customer->balance > 0)
-                                <span class="fw-bold text-danger">عليه: {{ number_format($customer->balance, 2) }} ج.م</span>
+                                <span class="fw-bold text-danger"><i class="bi bi-arrow-up-circle me-1"></i>عليه: {{ number_format($customer->balance, 2) }} ج.م</span>
                             @elseif($customer->balance < 0)
-                                <span class="fw-bold text-success">له: {{ number_format(abs($customer->balance), 2) }} ج.م</span>
+                                <span class="fw-bold text-success"><i class="bi bi-arrow-down-circle me-1"></i>له: {{ number_format(abs($customer->balance), 2) }} ج.م</span>
                             @else
                                 <span class="text-muted">صفر</span>
                             @endif
                         </td>
                         <td>
                             <div class="btn-group btn-group-sm">
-                                <a href="{{ route('customers.show', $customer) }}" class="btn btn-outline-info"><i class="bi bi-eye"></i> الحساب</a>
-                                <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#payModal{{ $customer->id }}"><i class="bi bi-cash"></i> سداد/سلفة</button>
-                                <a href="{{ route('customers.edit', $customer) }}" class="btn btn-outline-warning"><i class="bi bi-pencil"></i></a>
+                                <a href="{{ route('customers.show', $customer) }}" class="btn btn-outline-info" title="الحساب"><i class="bi bi-eye"></i> الحساب</a>
+                                <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#payModal{{ $customer->id }}" title="سداد"><i class="bi bi-cash"></i> سداد</button>
+                                <a href="{{ route('customers.edit', $customer) }}" class="btn btn-outline-warning" title="تعديل"><i class="bi bi-pencil"></i></a>
                             </div>
-
-
                         </td>
                     </tr>
                     @empty
-                    <tr><td colspan="6" class="text-center text-muted py-4">لا يوجد عملاء</td></tr>
+                    <tr>
+                        <td colspan="5" class="empty-state">
+                            <i class="bi bi-people"></i>
+                            <p>لا يوجد عملاء</p>
+                            <a href="{{ route('customers.create') }}" class="btn btn-sm btn-primary mt-2">إضافة أول عميل</a>
+                        </td>
+                    </tr>
                     @endforelse
                 </tbody>
             </table>
@@ -85,7 +112,6 @@
 </div>
 
 @foreach($customers as $customer)
-{{-- Payment/Advance Modal --}}
 <div class="modal fade" id="payModal{{ $customer->id }}" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -113,8 +139,8 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">المبلغ <span class="text-danger">*</span></label>
-                        <input type="number" name="amount" class="form-control" step="0.01" min="0.01" required>
+                        <label class="form-label">المبلغ <span class="required">*</span></label>
+                        <input type="number" name="amount" class="form-control form-control-lg" step="0.01" min="0.01" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">ملاحظات</label>
@@ -123,11 +149,11 @@
                 </div>
                 <div class="modal-footer">
                     <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i> تأكيد</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">إلغاء</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 @endforeach
-
 @endsection

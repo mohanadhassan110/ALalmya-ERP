@@ -1,10 +1,16 @@
 @extends('layouts.app')
 @section('title', 'الموردين - سنتر العالمية')
 @section('page-title', 'إدارة الموردين')
+@section('breadcrumb')
+    <a href="{{ route('home') }}">الرئيسية</a> / الموردين
+@endsection
 
 @section('content')
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h4 class="fw-bold mb-0"><i class="bi bi-building me-2 text-primary"></i>الموردين</h4>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-building me-2 text-primary"></i>الموردين</h4>
+        <small class="text-muted">{{ $suppliers->count() }} مورد — إجمالي المديونيات: {{ number_format($suppliers->sum('current_balance'), 2) }} ج.م</small>
+    </div>
     <a href="{{ route('suppliers.create') }}" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i> إضافة مورد</a>
 </div>
 
@@ -14,7 +20,6 @@
             <table class="table table-hover mb-0">
                 <thead>
                     <tr>
-                        <th>#</th>
                         <th>اسم المورد</th>
                         <th>الهاتف</th>
                         <th>الرصيد الافتتاحي</th>
@@ -25,11 +30,24 @@
                 <tbody>
                     @forelse($suppliers as $supplier)
                     <tr>
-                        <td>{{ $supplier->id }}</td>
                         <td class="fw-bold">
                             <a href="{{ route('suppliers.show', $supplier) }}" class="text-decoration-none">{{ $supplier->name }}</a>
                         </td>
-                        <td>{{ $supplier->phone ?? '—' }}</td>
+                        <td>
+                            @if($supplier->phone)
+                                <div class="d-flex gap-1 align-items-center">
+                                    <span>{{ $supplier->phone }}</span>
+                                    <a href="https://wa.me/{{ preg_replace('/[^0-9]/', '', $supplier->phone) }}" target="_blank" class="btn btn-sm btn-outline-success p-0 px-1" title="واتساب">
+                                        <i class="bi bi-whatsapp"></i>
+                                    </a>
+                                    <a href="tel:{{ $supplier->phone }}" class="btn btn-sm btn-outline-primary p-0 px-1" title="اتصال">
+                                        <i class="bi bi-telephone"></i>
+                                    </a>
+                                </div>
+                            @else
+                                <span class="text-muted">—</span>
+                            @endif
+                        </td>
                         <td>{{ number_format($supplier->initial_balance, 2) }} ج.م</td>
                         <td>
                             <span class="fw-bold {{ $supplier->current_balance > 0 ? 'text-danger' : 'text-success' }}">
@@ -41,17 +59,17 @@
                                 <a href="{{ route('suppliers.show', $supplier) }}" class="btn btn-outline-info"><i class="bi bi-eye"></i> السجل</a>
                                 <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#payModal{{ $supplier->id }}"><i class="bi bi-cash"></i> سداد</button>
                                 <a href="{{ route('suppliers.edit', $supplier) }}" class="btn btn-outline-warning"><i class="bi bi-pencil"></i></a>
-                                <form method="POST" action="{{ route('suppliers.destroy', $supplier) }}" class="d-inline" onsubmit="return confirm('هل أنت متأكد؟')">
-                                    @csrf @method('DELETE')
-                                    <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
-                                </form>
                             </div>
-
-
                         </td>
                     </tr>
                     @empty
-                    <tr><td colspan="6" class="text-center text-muted py-4">لا يوجد موردين</td></tr>
+                    <tr>
+                        <td colspan="5" class="empty-state">
+                            <i class="bi bi-building"></i>
+                            <p>لا يوجد موردين</p>
+                            <a href="{{ route('suppliers.create') }}" class="btn btn-sm btn-primary mt-2">إضافة أول مورد</a>
+                        </td>
+                    </tr>
                     @endforelse
                 </tbody>
             </table>
@@ -82,7 +100,6 @@
 @endif
 
 @foreach($suppliers as $supplier)
-{{-- Payment Modal --}}
 <div class="modal fade" id="payModal{{ $supplier->id }}" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -95,8 +112,8 @@
                 <div class="modal-body">
                     <div class="alert alert-info">الرصيد الحالي: <strong>{{ number_format($supplier->current_balance, 2) }} ج.م</strong></div>
                     <div class="mb-3">
-                        <label class="form-label">المبلغ <span class="text-danger">*</span></label>
-                        <input type="number" name="amount" class="form-control" step="0.01" min="0.01" required>
+                        <label class="form-label">المبلغ <span class="required">*</span></label>
+                        <input type="number" name="amount" class="form-control form-control-lg" step="0.01" min="0.01" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">ملاحظات</label>
@@ -105,11 +122,11 @@
                 </div>
                 <div class="modal-footer">
                     <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i> تأكيد السداد</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">إلغاء</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 @endforeach
-
 @endsection

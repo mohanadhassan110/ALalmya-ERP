@@ -1,6 +1,9 @@
 @extends('layouts.app')
 @section('title', 'المصروفات - سنتر العالمية')
 @section('page-title', 'إدارة المصروفات')
+@section('breadcrumb')
+    <a href="{{ route('home') }}">الرئيسية</a> / المصروفات
+@endsection
 
 @section('content')
 <div class="row g-4">
@@ -12,20 +15,20 @@
                 <form method="POST" action="{{ route('expenses.store') }}">
                     @csrf
                     <div class="mb-3">
-                        <label class="form-label">المبلغ <span class="text-danger">*</span></label>
-                        <input type="number" name="amount" class="form-control form-control-lg" step="0.01" min="0.01" required>
+                        <label class="form-label">المبلغ <span class="required">*</span></label>
+                        <input type="number" name="amount" class="form-control form-control-lg" step="0.01" min="0.01" required autofocus>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">السبب <span class="text-danger">*</span></label>
+                        <label class="form-label">السبب <span class="required">*</span></label>
                         <input type="text" name="reason" class="form-control" required placeholder="سبب المصروف">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">التاريخ <span class="text-danger">*</span></label>
+                        <label class="form-label">التاريخ <span class="required">*</span></label>
                         <input type="date" name="expense_date" class="form-control" value="{{ $date }}" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">ملاحظات</label>
-                        <input type="text" name="notes" class="form-control">
+                        <input type="text" name="notes" class="form-control" placeholder="ملاحظات اختيارية">
                     </div>
                     <button type="submit" class="btn btn-danger w-100"><i class="bi bi-wallet2 me-1"></i> تسجيل المصروف</button>
                 </form>
@@ -35,7 +38,6 @@
 
     {{-- Today's Expenses --}}
     <div class="col-md-8">
-        {{-- Date Picker --}}
         <div class="card mb-3">
             <div class="card-body py-3">
                 <form method="GET" class="d-flex gap-2 align-items-end">
@@ -48,7 +50,6 @@
             </div>
         </div>
 
-        {{-- Daily Total --}}
         <div class="stat-card bg-gradient-danger mb-3">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
@@ -59,7 +60,6 @@
             </div>
         </div>
 
-        {{-- Expense List --}}
         <div class="card">
             <div class="card-header"><i class="bi bi-list me-2"></i>مصروفات يوم {{ $date }}</div>
             <div class="card-body p-0">
@@ -78,20 +78,26 @@
                         <tbody>
                             @forelse($expenses as $expense)
                             <tr>
-                                <td>{{ $expense->id }}</td>
+                                <td class="text-muted">{{ $expense->id }}</td>
                                 <td class="fw-bold text-danger">{{ number_format($expense->amount, 2) }} ج.م</td>
                                 <td>{{ $expense->reason }}</td>
                                 <td class="text-muted small">{{ $expense->notes ?? '—' }}</td>
                                 <td class="text-muted small">{{ $expense->created_at->format('H:i') }}</td>
                                 <td>
-                                    <form method="POST" action="{{ route('expenses.destroy', $expense) }}" class="d-inline" onsubmit="return confirm('حذف هذا المصروف؟')">
+                                    <form method="POST" action="{{ route('expenses.destroy', $expense) }}" class="d-inline"
+                                          onsubmit="event.preventDefault(); confirmAction('حذف المصروف', 'هل أنت متأكد من حذف هذا المصروف؟', this);">
                                         @csrf @method('DELETE')
                                         <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
                                     </form>
                                 </td>
                             </tr>
                             @empty
-                            <tr><td colspan="6" class="text-center text-muted py-4">لا توجد مصروفات لهذا اليوم</td></tr>
+                            <tr>
+                                <td colspan="6" class="empty-state">
+                                    <i class="bi bi-wallet2"></i>
+                                    <p>لا توجد مصروفات لهذا اليوم</p>
+                                </td>
+                            </tr>
                             @endforelse
                         </tbody>
                     </table>

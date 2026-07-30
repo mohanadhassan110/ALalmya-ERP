@@ -1,12 +1,18 @@
 @extends('layouts.app')
 @section('title', 'المنتجات - سنتر العالمية')
 @section('page-title', 'إدارة المنتجات')
+@section('breadcrumb')
+    <a href="{{ route('home') }}">الرئيسية</a> / المنتجات
+@endsection
 
 @section('content')
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <h4 class="fw-bold mb-0"><i class="bi bi-box-seam-fill me-2 text-primary"></i>المنتجات</h4>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-box-seam-fill me-2 text-primary"></i>المنتجات</h4>
+        <small class="text-muted">{{ $products->total() }} منتج — {{ \App\Models\Product::where('stock_quantity', '<=', 0)->count() }} نفد — {{ \App\Models\Product::where('stock_quantity', '>', 0)->where('stock_quantity', '<=', 5)->count() }} منخفض</small>
+    </div>
     <a href="{{ route('products.create') }}" class="btn btn-primary">
-        <i class="bi bi-plus-circle me-1"></i> إضافة منتج جديد
+        <i class="bi bi-plus-circle me-1"></i> إضافة منتج
     </a>
 </div>
 
@@ -15,7 +21,7 @@
     <div class="card-body py-3">
         <form method="GET" class="row g-2 align-items-end">
             <div class="col-md-5">
-                <input type="text" name="search" class="form-control" placeholder="بحث بالاسم..." value="{{ request('search') }}">
+                <input type="text" name="search" class="form-control" placeholder="بحث بالاسم أو SKU..." value="{{ request('search') }}" autofocus>
             </div>
             <div class="col-md-4">
                 <select name="category_id" class="form-select">
@@ -44,47 +50,54 @@
                         <th>الفئة</th>
                         <th>سعر التكلفة</th>
                         <th>سعر الجملة</th>
-                        <th>الكمية</th>
+                        <th>سعر التجزئة</th>
+                        <th>المخزون</th>
                         <th>الإجراءات</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($products as $product)
                     <tr>
-                        <td>{{ $product->id }}</td>
+                        <td class="text-muted">{{ $product->id }}</td>
                         <td>
                             <div class="fw-bold">{{ $product->name }}</div>
-                            @if($product->sku)<small class="text-muted">{{ $product->sku }}</small>@endif
+                            @if($product->sku)<small class="text-muted"><i class="bi bi-upc-scan me-1"></i>{{ $product->sku }}</small>@endif
                         </td>
                         <td><span class="badge bg-light text-dark">{{ $product->category->name }}</span></td>
                         <td>{{ number_format($product->cost_price, 2) }}</td>
                         <td>{{ number_format($product->wholesale_price, 2) }}</td>
+                        <td>{{ $product->retail_price > 0 ? number_format($product->retail_price, 2) : '—' }}</td>
                         <td>
                             @if($product->stock_quantity <= 0)
-                                <span class="badge bg-danger">نفد</span>
+                                <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>نفد</span>
                             @elseif($product->stock_quantity <= 5)
-                                <span class="badge bg-warning text-dark">{{ $product->stock_quantity }}</span>
+                                <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>{{ $product->stock_quantity }}</span>
                             @else
-                                <span class="badge bg-success">{{ $product->stock_quantity }}</span>
+                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>{{ $product->stock_quantity }}</span>
                             @endif
                         </td>
                         <td>
                             <div class="btn-group btn-group-sm">
-                                <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#addStockModal{{ $product->id }}">
+                                <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#addStockModal{{ $product->id }}" title="توريد">
                                     <i class="bi bi-plus-lg"></i> توريد
                                 </button>
-                                <a href="{{ route('products.edit', $product) }}" class="btn btn-outline-warning"><i class="bi bi-pencil"></i></a>
-                                <form method="POST" action="{{ route('products.destroy', $product) }}" class="d-inline" onsubmit="return confirm('هل أنت متأكد؟')">
+                                <a href="{{ route('products.edit', $product) }}" class="btn btn-outline-warning" title="تعديل"><i class="bi bi-pencil"></i></a>
+                                <form method="POST" action="{{ route('products.destroy', $product) }}" class="d-inline"
+                                      onsubmit="event.preventDefault(); confirmAction('حذف المنتج', 'هل أنت متأكد من حذف {{ $product->name }}؟', this);">
                                     @csrf @method('DELETE')
-                                    <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                                    <button type="submit" class="btn btn-outline-danger btn-sm" title="حذف"><i class="bi bi-trash"></i></button>
                                 </form>
                             </div>
-
-
                         </td>
                     </tr>
                     @empty
-                    <tr><td colspan="7" class="text-center text-muted py-4">لا توجد منتجات</td></tr>
+                    <tr>
+                        <td colspan="8" class="empty-state">
+                            <i class="bi bi-box-seam"></i>
+                            <p>لا توجد منتجات</p>
+                            <a href="{{ route('products.create') }}" class="btn btn-sm btn-primary mt-2">إضافة أول منتج</a>
+                        </td>
+                    </tr>
                     @endforelse
                 </tbody>
             </table>
@@ -94,8 +107,8 @@
 
 <div class="mt-3">{{ $products->withQueryString()->links() }}</div>
 
+{{-- Stock Modals --}}
 @foreach($products as $product)
-{{-- Add Stock Modal --}}
 <div class="modal fade" id="addStockModal{{ $product->id }}" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -106,12 +119,16 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">الكمية <span class="text-danger">*</span></label>
-                        <input type="number" name="quantity" class="form-control" min="1" required>
+                    <div class="alert alert-info small">
+                        <i class="bi bi-info-circle me-1"></i>
+                        المخزون الحالي: <strong>{{ $product->stock_quantity }}</strong> — سعر التكلفة: <strong>{{ number_format($product->cost_price, 2) }} ج.م</strong>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">سعر الشراء للقطعة <span class="text-danger">*</span></label>
+                        <label class="form-label">الكمية <span class="required">*</span></label>
+                        <input type="number" name="quantity" class="form-control" min="1" required autofocus>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">سعر الشراء للقطعة <span class="required">*</span></label>
                         <input type="number" name="cost_price" class="form-control" step="0.01" value="{{ $product->cost_price }}" required>
                     </div>
                     <div class="mb-3">
@@ -119,7 +136,7 @@
                         <select name="supplier_id" class="form-select">
                             <option value="">بدون مورد (بضاعة خالصة)</option>
                             @foreach(\App\Models\Supplier::orderBy('name')->get() as $sup)
-                                <option value="{{ $sup->id }}">{{ $sup->name }}</option>
+                                <option value="{{ $sup->id }}">{{ $sup->name }} (عليه: {{ number_format($sup->current_balance, 2) }})</option>
                             @endforeach
                         </select>
                     </div>
@@ -129,7 +146,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">ملاحظات</label>
-                        <input type="text" name="notes" class="form-control">
+                        <input type="text" name="notes" class="form-control" placeholder="ملاحظات اختيارية">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -141,5 +158,4 @@
     </div>
 </div>
 @endforeach
-
 @endsection

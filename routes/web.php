@@ -45,6 +45,7 @@ Route::get('invoices/wholesale/create', [InvoiceController::class, 'createWholes
 Route::post('invoices/wholesale', [InvoiceController::class, 'storeWholesale'])->name('invoices.store-wholesale');
 Route::get('invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
 Route::get('invoices/{invoice}/print', [InvoiceController::class, 'print'])->name('invoices.print');
+Route::post('invoices/{invoice}/cancel', [InvoiceController::class, 'cancel'])->name('invoices.cancel');
 Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy'])->name('invoices.destroy');
 
 // ========== المصروفات ==========

@@ -53,8 +53,7 @@ class InvoiceTest extends TestCase
         ]);
     }
 
-    /** @test */
-    public function it_can_create_retail_invoice_and_deducts_stock()
+    public function test_it_can_create_retail_invoice_and_deducts_stock()
     {
         $response = $this->postJson(route('invoices.store-retail'), [
             'items' => [
@@ -87,8 +86,7 @@ class InvoiceTest extends TestCase
         $this->assertEquals(8, $this->product1->stock_quantity);
     }
 
-    /** @test */
-    public function it_can_create_wholesale_invoice_with_customer_and_updates_balance()
+    public function test_it_can_create_wholesale_invoice_with_customer_and_updates_balance()
     {
         $response = $this->postJson(route('invoices.store-wholesale'), [
             'customer_id' => $this->customer->id,
@@ -134,8 +132,7 @@ class InvoiceTest extends TestCase
         $this->assertEquals(3, $this->product2->stock_quantity);
     }
 
-    /** @test */
-    public function it_can_cancel_an_invoice_and_restores_stock_and_customer_balance()
+    public function test_it_can_cancel_an_invoice_and_restores_stock_and_customer_balance()
     {
         // 1. Create a wholesale invoice first
         $invoice = Invoice::create([

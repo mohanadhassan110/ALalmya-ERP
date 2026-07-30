@@ -73,7 +73,7 @@ class ReportController extends Controller
         $totalProfit = Invoice::whereBetween('created_at', [$dateFrom, $dateTo . ' 23:59:59'])->sum('profit');
 
         // 5. إجمالي المصروفات (في الفترة)
-        $totalExpenses = Expense::whereBetween('expense_date', [$dateFrom, $dateTo])->sum('amount');
+        $totalExpenses = Expense::whereBetween('expense_date', [$dateFrom, $dateTo . ' 23:59:59'])->sum('amount');
 
         // 6. صافي الربح النهائي = الأرباح - المصروفات
         $netProfit = $totalProfit - $totalExpenses;
